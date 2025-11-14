@@ -11,6 +11,7 @@ if len(__file__.split("/")[:-1]) > 1:
 
 import displayio
 import gc
+import math
 import os
 import sys
 import supervisor
@@ -55,6 +56,15 @@ display = supervisor.runtime.display
 # setup FruitJam peripherals and networking
 fj = adafruit_fruitjam.FruitJam()
 
+# load images
+default_icon_bmp, default_icon_palette = adafruit_imageload.load("bitmaps/default_icon.bmp")
+default_icon_palette.make_transparent(0)
+left_bmp, left_palette = adafruit_imageload.load("bitmaps/arrow_left.bmp")
+left_palette.make_transparent(0)
+right_bmp, right_palette = adafruit_imageload.load("bitmaps/arrow_right.bmp")
+right_palette.make_transparent(0)
+left_palette[2] = right_palette[2] = (config.palette_arrow if config is not None else 0x004abe)
+
 # display constants
 SCALE = 2 if display.width > 360 else 1
 
@@ -69,26 +79,33 @@ STATUS_PADDING = 4
 MENU_HEIGHT = 24
 MENU_GAP = 8
 
-PAGE_SIZE = 3
-ITEM_MARGIN = 16
-ITEM_FULL_WIDTH = DISPLAY_WIDTH - ITEM_MARGIN * 2
-ITEM_WIDTH = ITEM_FULL_WIDTH // PAGE_SIZE
-ITEM_HEIGHT = DISPLAY_HEIGHT - TITLE_HEIGHT - MENU_HEIGHT - ITEM_MARGIN * 2 - STATUS_HEIGHT // SCALE
+PAGE_COLUMNS = SCALE
+PAGE_ROWS = 3
+PAGE_SIZE = PAGE_COLUMNS * PAGE_ROWS
+
+ARROW_MARGIN = 2
+
+GRID_MARGIN = 8 * SCALE
+GRID_WIDTH = display.width - GRID_MARGIN * 2 - (ARROW_MARGIN + left_bmp.width) * SCALE * 2
+GRID_HEIGHT = display.height - TITLE_HEIGHT * SCALE - MENU_HEIGHT * SCALE - GRID_MARGIN * 2 - STATUS_HEIGHT
+
+ITEM_WIDTH = GRID_WIDTH // PAGE_COLUMNS
+ITEM_HEIGHT = GRID_HEIGHT // PAGE_ROWS
 
 # create groups
 root_group = displayio.Group()
 display.root_group = root_group
 
-scaled_group = displayio.Group(scale=SCALE)
-root_group.append(scaled_group)
-
 bg_palette = displayio.Palette(1)
 bg_palette[0] = config.palette_bg if config is not None else 0x222222
 bg_tg = displayio.TileGrid(
-    bitmap=displayio.Bitmap(DISPLAY_WIDTH, DISPLAY_HEIGHT, 1),
+    bitmap=displayio.Bitmap(display.width, display.height, 1),
     pixel_shader=bg_palette,
 )
-scaled_group.append(bg_tg)
+root_group.append(bg_tg)
+
+scaled_group = displayio.Group(scale=SCALE)
+root_group.append(scaled_group)
 
 # add title
 title_label = Label(
@@ -107,22 +124,29 @@ root_group.append(status_group)
 status_bg_palette = displayio.Palette(1)
 status_bg_palette[0] = config.palette_fg if config is not None else 0xffffff
 status_bg_tg = displayio.TileGrid(
-    bitmap=displayio.Bitmap(DISPLAY_WIDTH, DISPLAY_HEIGHT, 1),
-    pixel_shader=bg_palette,
+    bitmap=displayio.Bitmap(display.width, STATUS_HEIGHT, 1),
+    pixel_shader=status_bg_palette,
+    y=display.height - STATUS_HEIGHT,
 )
 status_group.append(status_bg_tg)
 
-status_text = TextBox(
+status_label = Label(
     font=FONT,
     text="Loading...",
-    width=display.width - STATUS_PADDING * 2,
-    height=STATUS_HEIGHT,
-    align=TextBox.ALIGN_LEFT,
     color=(config.palette_bg if config is not None else 0x222222),
-    x=STATUS_PADDING,
-    y=display.height - STATUS_HEIGHT,
+    anchor_point=(0, 0.5),
+    anchored_position=(STATUS_PADDING, display.height - STATUS_HEIGHT // 2)
 )
-status_group.append(status_text)
+status_group.append(status_label)
+
+page_label = Label(
+    font=FONT,
+    text="0/0",
+    color=(config.palette_bg if config is not None else 0x222222),
+    anchor_point=(1, 0.5),
+    anchored_position=(display.width - STATUS_PADDING, display.height - STATUS_HEIGHT // 2)
+)
+status_group.append(page_label)
 
 # check that sd card is mounted
 def reset(timeout:int = 0) -> None:
@@ -132,7 +156,8 @@ def reset(timeout:int = 0) -> None:
     supervisor.reload()
 
 if not fj.sd_check():
-    status_text.text = "SD card not mounted! SD card installation required for this application."
+    status_label.text = "SD card not mounted! SD card installation required for this application."
+    display.refresh()
     reset(3)
 
 # create apps directory on sd card if it doesn't exist
@@ -154,21 +179,15 @@ try:
         force_content_type=adafruit_fruitjam.network.CONTENT_JSON,
         timeout=10,
     ))
+    if type(applications) is int:
+        raise ValueError("{:d} response".format(applications))
 except (OSError, ValueError, AttributeError) as e:
-    status_text.text = "Unable to fetch applications database! {:s}".format(e)
+    status_label.text = "Unable to fetch applications database! {:s}".format(str(e))
+    display.refresh()
     reset(3)
 
 categories = list(applications.keys())
 selected_category = None
-
-# load images
-default_icon_bmp, default_icon_palette = adafruit_imageload.load("launcher_assets/default_icon.bmp")
-default_icon_palette.make_transparent(0)
-left_bmp, left_palette = adafruit_imageload.load("launcher_assets/arrow_left.bmp")
-left_palette.make_transparent(0)
-right_bmp, right_palette = adafruit_imageload.load("launcher_assets/arrow_right.bmp")
-right_palette.make_transparent(0)
-left_palette[2] = right_palette[2] = (config.palette_arrow if config is not None else 0x004abe)
 
 # setup menu
 category_group = displayio.Group()
@@ -176,7 +195,7 @@ scaled_group.append(category_group)
 MENU_WIDTH = (DISPLAY_WIDTH - MENU_GAP * (len(categories) + 1)) // len(categories)
 for index, category in enumerate(categories):
     category_button = Button(
-        x=(MENU_WIDTH + MENU_GAP) * index,
+        x=(MENU_WIDTH + MENU_GAP) * index + MENU_GAP,
         y=TITLE_HEIGHT,
         width=MENU_WIDTH,
         height=MENU_HEIGHT,
@@ -189,53 +208,47 @@ for index, category in enumerate(categories):
         selected_fill=(config.palette_fg if config is not None else 0xffffff),
         selected_label=(config.palette_bg if config is not None else 0x222222),
     )
-    category_button.selected = category == select_category
     category_group.append(category_button)
 
 # setup items
 item_grid = GridLayout(
-    x=(DISPLAY_WIDTH - ITEM_FULL_WIDTH) // 2,
-    y=(DISPLAY_HEIGHT - ITEM_HEIGHT) // 2,
-    width=ITEM_WIDTH,
-    height=ITEM_HEIGHT,
-    grid_size=(PAGE_SIZE, 1),
+    x=(display.width - GRID_WIDTH) // 2,
+    y=TITLE_HEIGHT * SCALE + MENU_HEIGHT * SCALE + GRID_MARGIN,
+    width=GRID_WIDTH,
+    height=GRID_HEIGHT,
+    grid_size=(PAGE_COLUMNS, PAGE_ROWS),
     divider_lines=False,
 )
-scaled_group.append(item_grid)
+root_group.append(item_grid)
 
-for i in range(PAGE_SIZE):
+for index in range(PAGE_SIZE):
     item_group = AnchoredGroup()
     item_group.hidden = True
-    item_grid.add_content(
-        cell_content=item_group,
-        grid_position=(0, i),
-        cell_size=(1, 1),
-    )
 
-    item_tg = displayio.TileGrid(
+    item_icon = displayio.TileGrid(
         bitmap=default_icon_bmp,
         pixel_shader=default_icon_palette,
-        x=ITEM_WIDTH // 2,
+        x=(ITEM_HEIGHT - default_icon_bmp.height) // 2,
         y=(ITEM_HEIGHT - default_icon_bmp.height) // 2,
     )
-    item_group.append(item_tg)
+    item_group.append(item_icon)
 
     item_title = Label(
         font=FONT,
         text="[title]",
         color=(config.palette_fg if config is not None else 0xffffff),
-        x=ITEM_HEIGHT,
-        y=(ITEM_HEIGHT - item_tg.tile_height) // 2,
+        anchor_point=(0, 0),
+        anchored_position=(ITEM_HEIGHT, (ITEM_HEIGHT - item_icon.tile_height) // 2),
+        scale=SCALE,
     )
     item_group.append(item_title)
 
     item_author = Label(
         font=FONT,
         text="[author]",
-        width=ITEM_WIDTH,
         color=(config.palette_fg if config is not None else 0xffffff),
-        x=ITEM_HEIGHT,
-        y=item_title.y + item_title.height,
+        anchor_point=(0, 0),
+        anchored_position=(ITEM_HEIGHT, item_title.y + item_title.height),
     )
     item_group.append(item_author)
 
@@ -243,13 +256,19 @@ for i in range(PAGE_SIZE):
         font=FONT,
         text="[description]",
         width=ITEM_WIDTH - ITEM_HEIGHT,
-        height=item_tg.tile_height - item_title.height - item_author.height,
+        height=item_icon.tile_height - item_title.height - item_author.height,
         align=TextBox.ALIGN_LEFT,
         color=(config.palette_fg if config is not None else 0xffffff),
-        x=ITEM_HEIGHT,
-        y=item_author.y + item_author.height,
+        anchor_point=(0, 0),
+        anchored_position=(ITEM_HEIGHT, item_author.y + item_author.height),
     )
     item_group.append(item_description)
+
+    item_grid.add_content(
+        cell_content=item_group,
+        grid_position=(index % PAGE_COLUMNS, index // PAGE_COLUMNS),
+        cell_size=(1, 1),
+    )
 
 # setup arrows
 original_arrow_btn_color = left_palette[2]
@@ -257,70 +276,100 @@ original_arrow_btn_color = left_palette[2]
 left_tg = AnchoredTileGrid(bitmap=left_bmp, pixel_shader=left_palette)
 left_tg.anchor_point = (0, 0.5)
 left_tg.anchored_position = (0, (DISPLAY_HEIGHT // 2) - 2)
+scaled_group.append(left_tg)
 
 right_tg = AnchoredTileGrid(bitmap=right_bmp, pixel_shader=right_palette)
 right_tg.anchor_point = (1.0, 0.5)
 right_tg.anchored_position = (DISPLAY_WIDTH, (DISPLAY_HEIGHT // 2) - 2)
+scaled_group.append(right_tg)
 
 def select_category(name: str) -> None:
     global categories, item_grid, selected_category
     if name not in categories or name == selected_category:
         return
     selected_category = name
+
+    # update button states
+    for category_button in category_group:
+        category_button.selected = category_button.label == name
     
     # hide all items
-    for i in range(PAGE_SIZE):
-        item_grid.get_content((0, i)).hidden = True
+    for index in range(PAGE_SIZE):
+        item_grid.get_content((index % PAGE_COLUMNS, index // PAGE_COLUMNS)).hidden = True
 
     # load first page of items
     show_page()
 
-def _download_image(url: str, name: str|None = None) -> str:
-    if url[-4:] != ".bmp":
-        raise ValueError("Only bitmap files supported")
+def _download_file(url: str, extension: str, name: str|None = None) -> str:
+    if not extension.startswith("."):
+        extension = "." + extension
 
     if name is None:
-        name = url.split("/")[-1][:-4]
-    elif name.endswith(".bmp"):
-        name = name[:-4]
-    path = "/sd/.cache/{:s}.bmp".format(name)
+        name = url.split("/")[-1][:-len(extension)]
+    elif name.endswith(extension):
+        name = name[:-len(extension)]
+    path = "/sd/.cache/{:s}{:s}".format(name, extension)
 
     # check if file already exists
     try:
         os.stat(path)
     except OSError:
-        # download image file (hopefully a bitmap!)
+        # download file
         fj.network.wget(url, path)
     return path
 
-def show_page(index: int = 0) -> None:
-    global selected_category
-    # hide all items
-    for i in range(PAGE_SIZE):
-        item_grid.get_content((0, i)).hidden = True
+def download_image(url: str, name: str|None = None) -> str:
+    return _download_file(
+        url=url,
+        extension=".bmp",
+        name=name,
+    )
+
+def download_json(url: str, name: str|None = None) -> str:
+    path = _download_file(
+        url=url,
+        extension=".json",
+        name=name,
+    )
+    with open(path, "r") as f:
+        data = json.loads(f.read())
+    return data
+
+current_page = 0
+def show_page(page: int = 0) -> None:
+    global selected_category, item_grid, page_label, applications, current_page
 
     # determine indices
-    start = index * PAGE_SIZE
-    end = min((index + 1) * PAGE_SIZE, len(applications[selected_category]))
-    if start >= len(applications[selected_category]):
+    start = page * PAGE_SIZE
+    end = min((page + 1) * PAGE_SIZE, len(applications[selected_category]))
+    if start < 0 or start >= len(applications[selected_category]):
         return
+
+    # hide all items
+    for index in range(PAGE_SIZE):
+        item_grid.get_content((index % PAGE_COLUMNS, index // PAGE_COLUMNS)).hidden = True
+    
+    # update page label
+    current_page = page
+    page_label.text = "{:d}/{:d}".format(page + 1, math.ceil(len(applications[selected_category]) / PAGE_SIZE))
     
     for index in range(start, end):
-        item_group = item_grid.get_content((0, i))
-        item_tg, item_title, item_author, item_description = item_group
+        item_group = item_grid.get_content((index % PAGE_COLUMNS, index // PAGE_COLUMNS))
+        item_icon, item_title, item_author, item_description = item_group
 
         full_name = applications[selected_category][index]
-        status_text.text = "Reading repository data from {:s}".format(full_name)
+        status_label.text = "Reading repository data from {:s}".format(full_name)
+        display.refresh()
 
         # get repository info
         try:
-            repository = json.loads(fj.fetch(
-                REPO_URL.format(full_name),
-                force_content_type=adafruit_fruitjam.network.CONTENT_JSON,
-                timeout=10,
-            ))
+            repository = download_json(
+                url=REPO_URL.format(full_name),
+                name=full_name.replace("/", "_"),
+            )
         except (OSError, ValueError) as e:
-            status_text.text = "Unable to read repository data from {:s}! {:s}".format(full_name, e)
+            status_label.text = "Unable to read repository data from {:s}! {:s}".format(full_name, str(e))
+            display.refresh()
             time.sleep(1)
             continue
         else:
@@ -328,17 +377,18 @@ def show_page(index: int = 0) -> None:
             item_description.text = repository["description"]
 
         # read metadata from repository
-        status_text.text = "Reading metadata from {:s}".format(full_name)
+        status_label.text = "Reading metadata from {:s}".format(full_name)
+        display.refresh()
         title = repository["name"]
         icon = None
         try:
-            metadata = json.loads(fj.fetch(
-                METADATA_URL.format(full_name),
-                force_content_type=adafruit_fruitjam.network.CONTENT_JSON,
-                timeout=10,
-            ))
+            metadata = download_json(
+                url=METADATA_URL.format(full_name),
+                name=full_name.replace("/", "_") + "_metadata",
+            )
         except (OSError, ValueError) as e:
-            status_text.text = "Unable to read metadata from {:s}! {:s}".format(full_name, e)
+            status_label.text = "Unable to read metadata from {:s}! {:s}".format(full_name, str(e))
+            display.refresh()
         else:
             title = metadata["title"]
             if "icon" in metadata:
@@ -348,55 +398,80 @@ def show_page(index: int = 0) -> None:
         
         if icon is not None:
             # download icon
-            status_text.text = "Downloading icon from {:s}".format(full_name)
+            status_label.text = "Downloading icon from {:s}".format(full_name)
+            display.refresh()
             try:
-                icon_path = _download_image(
+                icon_path = download_image(
                     ICON_URL.format(full_name, repository["default_branch"], icon),
                     repository["name"] + "_" + icon,
                 )
             except (OSError, ValueError) as e:
-                status_text.text = "Unable to download icon image from {:s}! {:s}".format(full_name, e)
-                item_tg.bitmap = default_icon_bmp
-                item_tg.pixel_shader = default_icon_palette
+                status_label.text = "Unable to download icon image from {:s}! {:s}".format(full_name, str(e))
+                display.refresh()
+                item_icon.bitmap = default_icon_bmp
+                item_icon.pixel_shader = default_icon_palette
             else:
                 icon_bmp, icon_palette = adafruit_imageload.load(icon_path)
-                item_tg.bitmap = icon_bmp
-                item_tg.pixel_shader = icon_palette
+                item_icon.bitmap = icon_bmp
+                item_icon.pixel_shader = icon_palette
 
         else:
-            item_tg.bitmap = default_icon_bmp
-            item_tg.pixel_shader = default_icon_palette
+            item_icon.bitmap = default_icon_bmp
+            item_icon.pixel_shader = default_icon_palette
 
         item_group.hidden = False
 
         # cleanup before loading next item
         gc.collect()
 
+    status_label.text = "Page loaded!"
+    display.refresh()
+
+def next_page() -> None:
+    global current_page
+    show_page(current_page + 1)
+
+def previous_page() -> None:
+    global current_page
+    show_page(current_page - 1)
+
 # select first category and show page items
 select_category(categories[0])
 
 # mouse control
 async def mouse_task() -> None:
-    global selected_category
+    global selected_category, categories, category_group, root_group, right_tg, left_tg
     while True:
         if (mouse := adafruit_usb_host_mouse.find_and_init_boot_mouse()) is not None:
-            mouse.x = display.width // 2
-            mouse.y = display.height // 2
-            root_group.append(mouse.tilegrid)
+            mouse.x = DISPLAY_WIDTH // 2
+            mouse.y = DISPLAY_HEIGHT // 2
+            scaled_group.append(mouse.tilegrid)
 
-            while mouse.update() is not None:
-                for index, button in enumerate(category_group):
-                    if categories[index] != selected_category:
-                        if button.selected and "left" not in mouse.pressed_btns:
-                            if button.contains((mouse.x, mouse.y)):
-                                select_category(category)
-                            else:
-                                button.selected = False
-                        elif not button.selected and "left" in mouse.pressed_btns and button.contains((mouse.x, mouse.y)):
-                            button.selected = True
+            timeouts = 0
+            previous_mouse_state = False
+            while timeouts < 60:
+                if mouse.update() is not None:
+                    timeouts = 0
+                    mouse_state = "left" in mouse.pressed_btns
+                    if mouse_state and not previous_mouse_state:
+                        if (clicked_cell := item_grid.which_cell_contains((mouse.x * SCALE, mouse.y * SCALE))) is not None:
+                            index = current_page * PAGE_SIZE + clicked_cell[1] * PAGE_COLUMNS + clicked_cell[0]
+                            print("clicked: {:d}".format(index))
+                        elif right_tg.contains((mouse.x, mouse.y, 0)):
+                            next_page()
+                        elif left_tg.contains((mouse.x, mouse.y, 0)):
+                            previous_page()
+                        else:
+                            for button in category_group:
+                                if button.contains((mouse.x, mouse.y)):
+                                    select_category(category)
+                                    break
+                    previous_mouse_state = mouse_state
+                else:
+                    timeouts += 1
                 await asyncio.sleep(1/30)
 
-            root_group.remove(mouse.tilegrid)
+            scaled_group.remove(mouse.tilegrid)
         await asyncio.sleep(1)
 
 async def keyboard_task() -> None:
