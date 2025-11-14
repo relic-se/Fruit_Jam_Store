@@ -29,6 +29,7 @@ import adafruit_fruitjam
 import adafruit_fruitjam.network
 import adafruit_fruitjam.peripherals
 import adafruit_imageload
+from adafruit_portalbase.network import HttpError
 import adafruit_usb_host_mouse
 import asyncio
 
@@ -377,7 +378,7 @@ def show_page(page: int = 0) -> None:
                 url=REPO_URL.format(full_name),
                 name=full_name.replace("/", "_"),
             )
-        except (OSError, ValueError) as e:
+        except (OSError, ValueError, HttpError) as e:
             item_description.text = ""
             status_label.text = "Unable to read repository data from {:s}! {:s}".format(full_name, str(e))
             display.refresh()
@@ -397,7 +398,7 @@ def show_page(page: int = 0) -> None:
                 url=METADATA_URL.format(full_name),
                 name=full_name.replace("/", "_") + "_metadata",
             )
-        except (OSError, ValueError) as e:
+        except (OSError, ValueError, HttpError) as e:
             status_label.text = "Unable to read metadata from {:s}! {:s}".format(full_name, str(e))
             display.refresh()
         else:
@@ -416,7 +417,7 @@ def show_page(page: int = 0) -> None:
                     ICON_URL.format(full_name, repository["default_branch"], icon),
                     repository["name"] + "_" + icon,
                 )
-            except (OSError, ValueError) as e:
+            except (OSError, ValueError, HttpError) as e:
                 status_label.text = "Unable to download icon image from {:s}! {:s}".format(full_name, str(e))
                 display.refresh()
             else:

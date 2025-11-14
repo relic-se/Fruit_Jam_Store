@@ -6,5 +6,6 @@ adafruit_displayio_layout
 adafruit_fruitjam
 adafruit_imageload
 adafruit_pathlib
+adafruit_portalbase
 adafruit_usb_host_mouse
 asyncio
