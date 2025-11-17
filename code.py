@@ -713,6 +713,25 @@ def remove_application(full_name: str = None) -> bool:
         status_label.text = "Successfully deleted application!"
         return True
 
+def open_application(full_name: str = None) -> None:
+    global selected_application, current_page
+    if full_name is None:
+        if selected_application is None:
+            return False
+        full_name = selected_application
+    repo_owner, repo_name = selected_application.split("/")
+    launch_file = "/sd/apps/{:s}/code.py".format(repo_name)
+
+    if is_app_installed(repo_name) and exists(launch_file):
+        status_label.text = "Opening {:s}...".format(repo_name)
+        supervisor.set_next_code_file(
+            launch_file,
+            sticky_on_reload=False,
+            reload_on_error=True,
+            working_directory="/".join(launch_file.split("/")[:-1])
+        )
+        supervisor.reload()
+
 selected_application = None
 def select_application(index: int) -> None:
     global selected_category, current_page, selected_application
@@ -755,6 +774,7 @@ def select_application(index: int) -> None:
             actions=[
                 ("Cancel", deselect_application),
                 ("Remove", toggle_application),
+                ("Open", open_application),
             ],
         )
 
