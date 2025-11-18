@@ -10,7 +10,6 @@ if len(__file__.split("/")[:-1]) > 1:
         sys.path.append(str(modules_directory.absolute()))
 
 import displayio
-import gc
 import math
 import os
 import sys
@@ -268,6 +267,10 @@ page_label = Label(
 )
 status_group.append(page_label)
 
+def log(msg: str) -> None:
+    status_label.text = msg
+    print(msg)
+
 # check that sd card is mounted
 def reset(timeout:int = 0) -> None:
     if timeout > 0:
@@ -276,7 +279,7 @@ def reset(timeout:int = 0) -> None:
     supervisor.reload()
 
 if not fj.sd_check():
-    status_label.text = "SD card not mounted! SD card installation required for this application."
+    log("SD card not mounted! SD card installation required for this application.")
     reset(3)
 
 # create necessary directories on sd card if they don't already exist
@@ -293,7 +296,7 @@ try:
     if type(applications) is int:
         raise ValueError("{:d} response".format(applications))
 except (OSError, ValueError, AttributeError) as e:
-    status_label.text = "Unable to fetch applications database! {:s}".format(str(e))
+    log("Unable to fetch applications database! {:s}".format(str(e)))
     reset(3)
 
 categories = list(applications.keys())
@@ -576,7 +579,7 @@ def show_page(page: int = 0) -> None:
 
         full_name = applications[selected_category][index]
 
-        status_label.text = "Reading repository data from {:s}".format(full_name)
+        log("Reading repository data from {:s}".format(full_name))
 
         # get repository info
         try:
@@ -586,7 +589,7 @@ def show_page(page: int = 0) -> None:
             )
         except (OSError, ValueError, HttpError) as e:
             item_description.text = ""
-            status_label.text = "Unable to read repository data from {:s}! {:s}".format(full_name, str(e))
+            log("Unable to read repository data from {:s}! {:s}".format(full_name, str(e)))
             time.sleep(1)
             continue
         else:
@@ -594,14 +597,14 @@ def show_page(page: int = 0) -> None:
             item_description.text = repository["description"]
 
         # read metadata from repository
-        status_label.text = "Reading metadata from {:s}".format(full_name)
+        log("Reading metadata from {:s}".format(full_name))
         try:
             metadata = download_json(
                 url=METADATA_URL.format(full_name),
                 name=full_name.replace("/", "_") + "_metadata",
             )
         except (OSError, ValueError, HttpError) as e:
-            status_label.text = "Unable to read metadata from {:s}! {:s}".format(full_name, str(e))
+            log("Unable to read metadata from {:s}! {:s}".format(full_name, str(e)))
         else:
             item_title.text = metadata["title"]
 
@@ -609,14 +612,14 @@ def show_page(page: int = 0) -> None:
                 item_description.text = metadata["description"]
 
             if "icon" in metadata:
-                status_label.text = "Downloading icon from {:s}".format(full_name)
+                log("Downloading icon from {:s}".format(full_name))
                 try:
                     icon_path = download_image(
                         ICON_URL.format(full_name, repository["default_branch"], metadata["icon"]),
                         repository["name"] + "_" + metadata["icon"],
                     )
                 except (OSError, ValueError, HttpError) as e:
-                    status_label.text = "Unable to download icon image from {:s}! {:s}".format(full_name, str(e))
+                    log("Unable to download icon image from {:s}! {:s}".format(full_name, str(e)))
                 else:
                     icon_bmp, icon_palette = adafruit_imageload.load(icon_path)
                     item_icon.bitmap = icon_bmp
@@ -625,7 +628,7 @@ def show_page(page: int = 0) -> None:
         # cleanup before loading next item
         gc.collect()
 
-    status_label.text = "Page loaded!"
+    log("Page loaded!")
 
 def next_page() -> None:
     global current_page
@@ -657,27 +660,27 @@ def download_application(full_name: str = None) -> bool:
         return False
 
     # get repository info
-    status_label.text = "Reading release data from {:s}".format(full_name)
+    log("Reading release data from {:s}".format(full_name))
     try:
         release = download_json(
             url=RELEASE_URL.format(full_name),
             name=full_name.replace("/", "_") + "_release",
         )
     except (OSError, ValueError, HttpError) as e:
-        status_label.text = "Unable to read release data from {:s}! {:s}".format(full_name, str(e))
+        log("Unable to read release data from {:s}! {:s}".format(full_name, str(e)))
         return False
     
     # download project bundle
-    status_label.text = "Downloading release assets..."
+    log("Downloading release assets...")
     asset = list(filter(lambda x: x["name"].endswith(".zip"), release["assets"]))[0]
     try:
         zip_path = download_zip(asset["browser_download_url"], repo_name)
     except (OSError, ValueError, HttpError) as e:
-        status_label.text = "Failed to download release assets for {:s}! {:s}".format(full_name, str(e))
+        log("Failed to download release assets for {:s}! {:s}".format(full_name, str(e)))
         return False
     
     # read archived file
-    status_label.text = "Installing application..."
+    log("Installing application...")
     result = False
     with open(zip_path, "rb") as f:
         zf = ZipFile(f)
@@ -697,11 +700,11 @@ def download_application(full_name: str = None) -> bool:
         try:
             zf[(dirpath + "/code.py").strip("/")]
         except KeyError:
-            status_label.text = "Could not locate application files within release!"
+            log("Could not locate application files within release!")
         else:
             # extract files
             extractall(zf, path, dirpath)
-            status_label.text = "Successfully installed {:s}!".format(full_name)
+            log("Successfully installed {:s}!".format(full_name))
             result = True
     
     # remove zip file
@@ -720,14 +723,14 @@ def remove_application(full_name: str = None) -> bool:
     if not is_app_installed(repo_name):
         return False
 
-    status_label.text = "Deleting {:s}...".format(path)
+    log("Deleting {:s}...".format(path))
     try:
         rmtree(path)
     except OSError as e:
-        status_label.text = "Failed to delete {:s}: {:s}".format(path, str(e))
+        log("Failed to delete {:s}: {:s}".format(path, str(e)))
         return False
     else:
-        status_label.text = "Successfully deleted application!"
+        log("Successfully deleted application!")
         return True
 
 def open_application(full_name: str = None) -> None:
@@ -740,7 +743,7 @@ def open_application(full_name: str = None) -> None:
     launch_file = "/sd/apps/{:s}/code.py".format(repo_name)
 
     if is_app_installed(repo_name) and exists(launch_file):
-        status_label.text = "Opening {:s}...".format(repo_name)
+        log("Opening {:s}...".format(repo_name))
         supervisor.set_next_code_file(
             launch_file,
             sticky_on_reload=False,
