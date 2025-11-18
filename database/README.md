@@ -94,7 +94,7 @@ USB host mode MIDI tester for Fruit Jam
 - Code Repository: [samblenny/fruit-jam-usb-midi-tester](https://github.com/samblenny/fruit-jam-usb-midi-tester)
 - Author: [Sam Blenny](https://github.com/samblenny)
 
-## Other
+## Video
 
 ### Fruit Jam Spirals
 
@@ -104,14 +104,4 @@ hypotrochoid spiral drawing thing for Fruit Jam
 
 - Latest Release: [Download](https://github.com/samblenny/fruit-jam-spirals/releases/latest)
 - Code Repository: [samblenny/fruit-jam-spirals](https://github.com/samblenny/fruit-jam-spirals)
-- Author: [Sam Blenny](https://github.com/samblenny)
-
-### Fruit Jam USB MIDI Tester
-
-USB host mode MIDI tester for Fruit Jam
-
-![visualizer screenshot](https://raw.githubusercontent.com/samblenny/fruit-jam-usb-midi-tester/main/midi-test-screenshot.png)
-
-- Latest Release: [Download](https://github.com/samblenny/fruit-jam-usb-midi-tester/releases/latest)
-- Code Repository: [samblenny/fruit-jam-usb-midi-tester](https://github.com/samblenny/fruit-jam-usb-midi-tester)
 - Author: [Sam Blenny](https://github.com/samblenny)
