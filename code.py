@@ -10,6 +10,7 @@ if len(__file__.split("/")[:-1]) > 1:
         sys.path.append(str(modules_directory.absolute()))
 
 import displayio
+import gc
 import math
 import os
 import sys
