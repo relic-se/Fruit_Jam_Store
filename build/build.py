@@ -51,7 +51,7 @@ def main():
 
     git_owner, git_name = re.findall(r'^https:\/\/github\.com\/([^\/]+)\/([^\/]+)$', git_remote)[0]
 
-    git_commit = git_repo.revparse_single("HEAD^").id
+    git_commit = str(git_repo.revparse_single("HEAD^").id)
 
     # get the project root directory
     build_dir = Path(__file__).parent
