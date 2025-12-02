@@ -2,7 +2,6 @@
 # SPDX-FileCopyrightText: Copyright 2025 Cooper Dalrymple (@relic-se)
 #
 # SPDX-License-Identifier: MIT
-import argparse
 import json
 import os
 from pathlib import Path
@@ -10,14 +9,6 @@ import re
 
 from github import Auth, Github
 from mdutils.mdutils import MdUtils
-
-if "GITHUB_TOKEN" in os.environ:
-    ACCESS_TOKEN = os.environ["GITHUB_TOKEN"]
-else:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--token", type=str, required=True)
-    ACCESS_TOKEN = parser.parse_args().token
-
 
 DATABASE_FILE = "applications.json"
 MARKDOWN_FILE = "README.md"
@@ -36,8 +27,7 @@ def main():
 
     # connect with GitHub API
     print("Connecting with GitHub Web API")
-    auth = Auth.Token(ACCESS_TOKEN)
-    gh = Github(auth=auth)
+    gh = Github()
 
     # setup README
     print("Beginning markdown file generation")
