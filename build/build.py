@@ -12,7 +12,7 @@ import shutil
 import zipfile
 
 import pygit2
-import requests
+from github import Github
 from circup.commands import main as circup_cli
 
 ASSET_DIRS = (
@@ -26,11 +26,12 @@ SRC_FILES = (
     "metadata.json"
 )
 
-def get_latest_repository_release_assets(name:str|dict) -> list:
-    request_url = "https://api.github.com/repos/{}/releases/latest".format(name)
-    release_response = requests.get(request_url, allow_redirects=True)
-    release_data = release_response.json()
-    return release_data["assets"]
+def get_latest_repository_release_assets(name:str) -> list:
+    gh = Github()
+    repo = gh.get_repo(name)
+    release = repo.get_latest_release()
+    gh.close()
+    return release.assets
 
 def replace_tags(file:Path, data:dict) -> None:
     with open(file, "r") as f:
@@ -95,7 +96,7 @@ def main():
 
     try:
         for asset in get_latest_repository_release_assets("adafruit/Adafruit_CircuitPython_Bundle"):
-            bundle_version = re.findall(r'^adafruit-circuitpython-bundle-(\d+.x)-mpy-\d{8}.zip$', asset["name"])
+            bundle_version = re.findall(r'^adafruit-circuitpython-bundle-(\d+.x)-mpy-\d{8}.zip$', asset.name)
             if not len(bundle_version):
                 continue
             bundle_version = bundle_version[0]
