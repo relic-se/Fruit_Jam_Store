@@ -4,10 +4,15 @@
 
 # load included modules if we aren't installed on the root path
 if len(__file__.split("/")[:-1]) > 1:
-    import adafruit_pathlib as pathlib
-    if (modules_directory := pathlib.Path("/".join(__file__.split("/")[:-1])) / "lib").exists():
+    lib_path = "/".join(__file__.split("/")[:-1]) + "/lib"
+    try:
+        import os
+        os.stat(lib_path)
+    except:
+        pass
+    else:
         import sys
-        sys.path.append(str(modules_directory.absolute()))
+        sys.path.append(lib_path)
 
 import displayio
 import gc
