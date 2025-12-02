@@ -9,10 +9,10 @@ import os
 from pathlib import Path
 import re
 import shutil
-import subprocess
 import zipfile
 
-import requests
+import pygit2
+from github import Github
 from circup.commands import main as circup_cli
 
 ASSET_DIRS = (
@@ -26,15 +26,12 @@ SRC_FILES = (
     "metadata.json"
 )
 
-def run(cmd):
-    result = subprocess.run(cmd, shell=True, check=True, capture_output=True)
-    return result.stdout.decode('utf-8').strip()
-
-def get_latest_repository_release_assets(name:str|dict) -> list:
-    request_url = "https://api.github.com/repos/{}/releases/latest".format(name)
-    release_response = requests.get(request_url, allow_redirects=True)
-    release_data = release_response.json()
-    return release_data["assets"]
+def get_latest_repository_release_assets(name:str) -> list:
+    gh = Github()
+    repo = gh.get_repo(name)
+    release = repo.get_latest_release()
+    gh.close()
+    return release.assets
 
 def replace_tags(file:Path, data:dict) -> None:
     with open(file, "r") as f:
@@ -47,16 +44,15 @@ def replace_tags(file:Path, data:dict) -> None:
 def main():
 
     # get github repository details
-    git_remote = run("git config --get remote.origin.url")
+    git_repo = pygit2.Repository(pygit2.discover_repository(os.getcwd()))
+
+    git_remote = git_repo.remotes["origin"].url
     git_remote = re.sub(r'^git@github\.com:', "https://github.com/", git_remote)
     git_remote = re.sub(r'\.git$', "", git_remote)
 
     git_owner, git_name = re.findall(r'^https:\/\/github\.com\/([^\/]+)\/([^\/]+)$', git_remote)[0]
 
-    try:
-        git_commit = run('git rev-parse --short HEAD')
-    except subprocess.CalledProcessError:
-        git_commit = "NO_COMMIT"
+    git_commit = str(git_repo.revparse_single("HEAD").id)
 
     # get the project root directory
     build_dir = Path(__file__).parent
@@ -100,7 +96,7 @@ def main():
 
     try:
         for asset in get_latest_repository_release_assets("adafruit/Adafruit_CircuitPython_Bundle"):
-            bundle_version = re.findall(r'^adafruit-circuitpython-bundle-(\d+.x)-mpy-\d{8}.zip$', asset["name"])
+            bundle_version = re.findall(r'^adafruit-circuitpython-bundle-(\d+.x)-mpy-\d{8}.zip$', asset.name)
             if not len(bundle_version):
                 continue
             bundle_version = bundle_version[0]

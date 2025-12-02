@@ -1,2 +1,3 @@
 circup
-requests
+pygit2
+PyGithub

@@ -7,7 +7,7 @@ name: Validate Build
 on: [pull_request, push]
 
 jobs:
-  validate-build:
+  validate-readme-build:
     runs-on: ubuntu-latest
     steps:
     - name: Set up requested Python version
@@ -29,7 +29,5 @@ jobs:
         pip install -r database/requirements.txt
     - name: Build README.md
       shell: bash
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         python database/build.py
