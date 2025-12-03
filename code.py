@@ -14,6 +14,7 @@ if len(__file__.split("/")[:-1]) > 1:
         import sys
         sys.path.append(lib_path)
 
+import atexit
 import displayio
 import gc
 import math
@@ -36,7 +37,6 @@ import adafruit_fruitjam.peripherals
 import adafruit_imageload
 from adafruit_portalbase.network import HttpError
 import adafruit_usb_host_mouse
-import asyncio
 
 from zipfile import ZipFile
 
@@ -836,69 +836,59 @@ def toggle_application(full_name: str = None) -> bool:
     return result
 
 # mouse control
-mouse_group = displayio.Group(scale=SCALE)
-root_group.append(mouse_group)
-async def mouse_task() -> None:
-    global selected_category, selected_application
+mouse = None
+if config is not None and config.use_mouse and (mouse := adafruit_usb_host_mouse.find_and_init_boot_mouse()) is not None:
+    mouse.scale = SCALE
+    mouse.x = DISPLAY_WIDTH // 2
+    mouse.y = DISPLAY_HEIGHT // 2
+
+    mouse_group = displayio.Group(scale=SCALE)
+    mouse_group.append(mouse.tilegrid)
+    root_group.append(mouse_group)
+
+def atexit_callback() -> None:
+    if mouse and mouse.was_attached and not mouse.device.is_kernel_driver_active(0):
+        mouse.device.attach_kernel_driver(0)
+atexit.register(atexit_callback)
+
+# flush input buffer
+while supervisor.runtime.serial_bytes_available:
+    sys.stdin.read(1)
+
+# control loop
+try:
+    previous_mouse_state = False
     while True:
-        if (mouse := adafruit_usb_host_mouse.find_and_init_boot_mouse()) is not None:
-            mouse.scale = SCALE
-            mouse.x = DISPLAY_WIDTH // 2
-            mouse.y = DISPLAY_HEIGHT // 2
-            mouse_group.append(mouse.tilegrid)
 
-            timeouts = 0
-            previous_mouse_state = False
-            while timeouts < 99:
-                if mouse.update() is not None:
-                    timeouts = 0
-                    mouse_state = "left" in mouse.pressed_btns
-                    if mouse_state and not previous_mouse_state:
-                        if dialog_buttons.hidden:
-                            if (clicked_cell := item_grid.which_cell_contains((mouse.x * SCALE, mouse.y * SCALE))) is not None:
-                                select_application(clicked_cell[1] * PAGE_COLUMNS + clicked_cell[0])
-                            elif not right_arrow.hidden and right_arrow.contains((mouse.x, mouse.y, 0)):
-                                next_page()
-                            elif not left_arrow.hidden and left_arrow.contains((mouse.x, mouse.y, 0)):
-                                previous_page()
-                            elif exit_tg.contains((mouse.x, mouse.y, 0)):
-                                reset()
-                            else:
-                                for button in category_group:
-                                    if button.contains((mouse.x, mouse.y)):
-                                        select_category(button.label)
-                                        break
-                        else:
-                            for button in dialog_buttons:
-                                if button.contains((mouse.x, mouse.y, 0)):
-                                    button.click()
-                    previous_mouse_state = mouse_state
-                else:
-                    timeouts += 1
-                await asyncio.sleep(1/30)
-
-            mouse_group.remove(mouse.tilegrid)
-        await asyncio.sleep(1)
-
-async def keyboard_task() -> None:
-    # flush input buffer
-    while supervisor.runtime.serial_bytes_available:
-        sys.stdin.read(1)
-
-    while True:
-        while (c := supervisor.runtime.serial_bytes_available) > 0:
-            key = sys.stdin.read(c)
+        # keyboard input
+        if (available := supervisor.runtime.serial_bytes_available) > 0:
+            key = sys.stdin.read(available)
             if key == "\x1b":  # escape
                 reset()
-        await asyncio.sleep(1/30)
 
-async def main() -> None:
-    await asyncio.gather(
-        asyncio.create_task(mouse_task()),
-        asyncio.create_task(keyboard_task()),
-    )
+        # mouse input
+        if mouse is not None and mouse.update() is not None:
+            mouse_state = "left" in mouse.pressed_btns
+            if mouse_state and not previous_mouse_state:
+                if dialog_buttons.hidden:
+                    if (clicked_cell := item_grid.which_cell_contains((mouse.x * SCALE, mouse.y * SCALE))) is not None:
+                        select_application(clicked_cell[1] * PAGE_COLUMNS + clicked_cell[0])
+                    elif not right_arrow.hidden and right_arrow.contains((mouse.x, mouse.y, 0)):
+                        next_page()
+                    elif not left_arrow.hidden and left_arrow.contains((mouse.x, mouse.y, 0)):
+                        previous_page()
+                    elif exit_tg.contains((mouse.x, mouse.y, 0)):
+                        reset()
+                    else:
+                        for button in category_group:
+                            if button.contains((mouse.x, mouse.y)):
+                                select_category(button.label)
+                                break
+                else:
+                    for button in dialog_buttons:
+                        if button.contains((mouse.x, mouse.y, 0)):
+                            button.click()
+            previous_mouse_state = mouse_state
 
-try:
-    asyncio.run(main())
 except KeyboardInterrupt:
     reset()

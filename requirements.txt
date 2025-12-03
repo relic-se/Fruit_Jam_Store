@@ -7,4 +7,3 @@ adafruit_fruitjam
 adafruit_imageload
 adafruit_portalbase
 adafruit_usb_host_mouse
-asyncio
