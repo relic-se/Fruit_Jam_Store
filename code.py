@@ -46,7 +46,7 @@ except ImportError:
     pass
 
 # program constants
-APPLICATIONS_URL = "https://raw.githubusercontent.com/relic-se/Fruit_Jam_Store/refs/heads/main/database/applications.json"
+APPLICATIONS_URL = "https://raw.githubusercontent.com/relic-se/Fruit_Jam_Library/refs/heads/main/database/applications.json"
 METADATA_URL = "https://raw.githubusercontent.com/{:s}/refs/heads/main/metadata.json"
 REPO_URL = "https://api.github.com/repos/{:s}"
 ICON_URL = "https://raw.githubusercontent.com/{:s}/{:s}/{:s}"
@@ -237,7 +237,7 @@ root_group.append(title_group)
 
 title_label = Label(
     font=FONT,
-    text="Fruit Jam Store",
+    text="Fruit Jam Library",
     color=(config.palette_fg if config is not None else 0xffffff),
     anchor_point=(0.5, 0.5),
     anchored_position=(DISPLAY_WIDTH // 2, TITLE_HEIGHT // 2),
