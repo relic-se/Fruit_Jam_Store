@@ -1,6 +1,8 @@
 # Fruit Jam Library
 Browse and install community CircuitPython applications on the Adafruit Fruit Jam.
 
+![screenshot of application on the Adafruit Fruit Jam using a custom color palette](assets/screenshot.jpg)
+
 ## Building
 Ensure that you have python 3.x installed system-wide and all the prerequisite libraries installed using the following command:
 
